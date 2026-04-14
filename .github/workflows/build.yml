@@ -1,0 +1,72 @@
+name: Build NEXORA APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+
+    - name: Install Capacitor
+      run: |
+        npm init -y
+        npm install @capacitor/core @capacitor/cli @capacitor/android
+
+    - name: Init Capacitor
+      run: npx cap init NEXORA com.nexora.app --web-dir www
+
+    - name: Add Android
+      run: npx cap add android
+
+    - name: Copy Java files
+      run: |
+        cp native/java/*.java android/app/src/main/java/com/nexora/app/
+
+    - name: Replace AndroidManifest
+      run: cp AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+
+    - name: Add google-services.json
+      run: echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > android/app/google-services.json
+
+    - name: Update build.gradle
+      run: |
+        sed -i '/dependencies {/a\    implementation "com.google.firebase:firebase-messaging:24.0.0"\n    implementation "androidx.core:core:1.13.1"' android/app/build.gradle
+        echo "apply plugin: 'com.google.gms.google-services'" >> android/app/build.gradle
+
+    - name: Add colors.xml
+      run: |
+        mkdir -p android/app/src/main/res/values/
+        cat > android/app/src/main/res/values/colors.xml << 'EOF'
+        <?xml version="1.0" encoding="utf-8"?>
+        <resources>
+            <color name="colorPrimary">#050508</color>
+            <color name="colorPrimaryDark">#050508</color>
+            <color name="colorAccent">#00d4ff</color>
+        </resources>
+        EOF
+
+    - name: Build APK
+      run: |
+        cd android
+        chmod +x gradlew
+        ./gradlew assembleDebug
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: NEXORA-APK
+        path: android/app/build/outputs/apk/debug/app-debug.apk
